@@ -117,6 +117,26 @@ input[type=text]:focus{border-color:#4a90d9;}
 #win-screen h1{color:#ffd700;text-shadow:0 0 30px #ffd700;}
 #lose-screen h1{color:#ff4444;text-shadow:0 0 30px #ff4444;}
 .stat-line{font-size:18px;margin:4px 0;color:#ccc;}
+/* Mobile Touch UI */
+canvas{touch-action:none;}
+.touch-joystick{position:fixed;z-index:100;touch-action:none;}
+.joystick-base{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);background:rgba(100,150,255,0.4);bottom:20px;}
+.joystick-thumb{position:absolute;width:50px;height:50px;border-radius:50%;background:rgba(100,150,255,0.8);border:2px solid rgba(255,255,255,0.6);top:50%;left:50%;transform:translate(-50%,-50%);}
+#left-joystick{left:20px;bottom:20px;}
+#right-joystick{right:20px;bottom:20px;}
+.touch-button{position:fixed;width:60px;height:60px;border-radius:50%;border:2px solid rgba(255,255,255,0.4);font-weight:bold;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:none;user-select:none;-webkit-touch-callout:none;z-index:101;}
+.touch-button:active{opacity:0.7;}
+#touch-fire{background:rgba(255,50,50,0.6);bottom:100px;right:20px;}
+#touch-reload{background:rgba(255,200,50,0.6);bottom:170px;right:20px;}
+#touch-medkit{background:rgba(255,100,200,0.6);bottom:170px;right:90px;}
+#touch-scope{background:rgba(100,150,255,0.6);bottom:170px;right:160px;display:none;}
+#touch-dive{background:rgba(200,100,255,0.6);bottom:140px;right:20px;display:none;}
+@media (max-width:1024px){
+  .btn{font-size:24px;padding:16px 50px;}
+  .diff-btn{font-size:20px;padding:14px 32px;}
+  input[type=text]{font-size:18px;padding:10px 16px;}
+  .controls-info{font-size:16px;}
+}
 </style>
 </head>
 <body>
@@ -129,7 +149,7 @@ input[type=text]:focus{border-color:#4a90d9;}
     <div style="color:#4a90d9;font-size:13px;margin-bottom:4px;">Your Name</div>
     <input type="text" id="player-name" maxlength="12" placeholder="Player" value="">
   </div>
-  <div style="margin-bottom:12px;">
+  <div style="margin-bottom:12px;" id="coop-toggle-container">
     <button class="btn" id="coop-toggle" style="background:linear-gradient(135deg,#dd7722,#cc6611);font-size:16px;padding:10px 30px;" onclick="toggleCoOp()">SPLIT-SCREEN CO-OP</button>
   </div>
   <div id="p2-name-input" style="margin-bottom:12px;display:none;">
@@ -318,6 +338,21 @@ input[type=text]:focus{border-color:#4a90d9;}
 @keyframes phaseFlash{0%{filter:brightness(3);}100%{filter:brightness(1);}}
 </style>
 
+<!-- Mobile Touch Controls -->
+<div id="left-joystick" class="touch-joystick" style="display:none;">
+  <div class="joystick-base"></div>
+  <div class="joystick-thumb"></div>
+</div>
+<div id="right-joystick" class="touch-joystick" style="display:none;">
+  <div class="joystick-base"></div>
+  <div class="joystick-thumb"></div>
+</div>
+<button id="touch-fire" class="touch-button" style="display:none;">FIRE</button>
+<button id="touch-reload" class="touch-button" style="display:none;">RELOAD</button>
+<button id="touch-medkit" class="touch-button" style="display:none;">HEAL</button>
+<button id="touch-scope" class="touch-button" style="display:none;">SCOPE</button>
+<button id="touch-dive" class="touch-button" style="display:none;">DIVE</button>
+
 <script>
 // ======================== CONFIG ========================
 const CFG = {
@@ -428,6 +463,12 @@ const TP_DISTANCE = 8;  // how far back the 3rd person camera sits
 const TP_HEIGHT = 4;    // how high above player in 3rd person
 const TP_LOOK_DOWN = 0.15; // slight downward angle offset in 3rd person
 
+// ======================== MOBILE SUPPORT ========================
+const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const mobileInput = { moveX: 0, moveY: 0, lookX: 0, lookY: 0, diving: false };
+let touchIds = { leftJoy: null, rightJoy: null, fire: null, reload: null, medkit: null, scope: null, dive: null };
+let joystickState = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
+
 // ======================== VIEW MODE ========================
 function setViewMode(mode) {
   viewMode = mode;
@@ -457,6 +498,7 @@ function applyViewMode() {
 
 // ======================== CO-OP TOGGLE ========================
 function toggleCoOp() {
+  if (isMobile) return; // disable co-op on mobile
   splitScreen = !splitScreen;
   const btn = document.getElementById('coop-toggle');
   const p2Input = document.getElementById('p2-name-input');
@@ -542,6 +584,17 @@ function initRenderer() {
   });
 
   minimapCtx = document.getElementById('minimap-canvas').getContext('2d');
+
+  // Mobile UI setup
+  if (isMobile) {
+    // Hide co-op button on mobile
+    document.getElementById('coop-toggle-container').style.display = 'none';
+    // Update controls info
+    const controlsInfo = document.querySelector('.controls-info');
+    if (controlsInfo) {
+      controlsInfo.innerHTML = '<b style="color:#4a90d9;">Touch Controls Enabled</b><br><span>Left Joystick:</span> Move &nbsp;|&nbsp; <span>Right Joystick:</span> Look<br><span>FIRE, RELOAD, HEAL, SCOPE</span> buttons on right side<br>Drop Phase: <span>DIVE</span> button to glide faster';
+    }
+  }
 
   // Start render loop immediately (for lobby bg etc)
   animate();
@@ -1812,6 +1865,18 @@ function initGame() {
   damageDealt = 0;
   p2KillCount = 0;
   p2DamageDealt = 0;
+
+  // Mobile initialization
+  if (isMobile) {
+    locked = true; // auto-lock on mobile
+    document.getElementById('left-joystick').style.display = 'block';
+    document.getElementById('right-joystick').style.display = 'block';
+    document.getElementById('touch-fire').style.display = 'block';
+    document.getElementById('touch-reload').style.display = 'block';
+    document.getElementById('touch-medkit').style.display = 'block';
+    document.getElementById('touch-dive').style.display = 'block'; // show during drop
+    updateMobileScopeButton();
+  }
 }
 
 // ======================== INPUT ========================
@@ -1926,6 +1991,207 @@ function setupInput() {
     player.pitch -= e.movementY * sens;
     player.pitch = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, player.pitch));
   });
+
+  // ======================== MOBILE TOUCH HANDLERS ========================
+  if (isMobile) {
+    setupMobileControls();
+  }
+}
+
+function updateMobileScopeButton() {
+  if (!isMobile || !player) return;
+  const scopeBtn = document.getElementById('touch-scope');
+  const w = WEAPONS[player.weapon];
+  if (w && w.scoped) {
+    scopeBtn.style.display = 'block';
+  } else {
+    scopeBtn.style.display = 'none';
+  }
+}
+
+function setupMobileControls() {
+  const leftJoystick = document.getElementById('left-joystick');
+  const rightJoystick = document.getElementById('right-joystick');
+  const fireBtn = document.getElementById('touch-fire');
+  const reloadBtn = document.getElementById('touch-reload');
+  const medkitBtn = document.getElementById('touch-medkit');
+  const scopeBtn = document.getElementById('touch-scope');
+  const diveBtn = document.getElementById('touch-dive');
+
+  const JOYSTICK_RADIUS = 60; // half of 120px diameter
+
+  function updateJoystickThumb(joystickEl, x, y) {
+    const thumb = joystickEl.querySelector('.joystick-thumb');
+    const base = joystickEl.querySelector('.joystick-base');
+    const baseCenterX = base.offsetWidth / 2;
+    const baseCenterY = base.offsetHeight / 2;
+    const dx = x - baseCenterX;
+    const dy = y - baseCenterY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxDist = JOYSTICK_RADIUS;
+    const clampedX = dx / Math.max(1, dist) * Math.min(maxDist, dist);
+    const clampedY = dy / Math.max(1, dist) * Math.min(maxDist, dist);
+    thumb.style.transform = `translate(calc(-50% + ${clampedX}px), calc(-50% + ${clampedY}px))`;
+    return { x: clampedX / maxDist, y: clampedY / maxDist };
+  }
+
+  function resetJoystick(joystickEl) {
+    const thumb = joystickEl.querySelector('.joystick-thumb');
+    thumb.style.transform = 'translate(-50%, -50%)';
+    return { x: 0, y: 0 };
+  }
+
+  // Left joystick: movement
+  let leftJoyTouchId = null;
+  leftJoystick.addEventListener('touchstart', e => {
+    if (leftJoyTouchId === null && !gameActive) return;
+    const touch = e.touches[0];
+    leftJoyTouchId = touch.identifier;
+    touchIds.leftJoy = touch.identifier;
+  });
+
+  document.addEventListener('touchmove', e => {
+    if (!gameActive) return;
+    for (let touch of e.touches) {
+      // Left joystick
+      if (touch.identifier === touchIds.leftJoy) {
+        const rect = leftJoystick.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        joystickState.left = updateJoystickThumb(leftJoystick, x, y);
+        mobileInput.moveX = joystickState.left.x;
+        mobileInput.moveY = joystickState.left.y;
+      }
+      // Right joystick
+      if (touch.identifier === touchIds.rightJoy) {
+        const rect = rightJoystick.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        joystickState.right = updateJoystickThumb(rightJoystick, x, y);
+        mobileInput.lookX = joystickState.right.x * 30; // sensitivity
+        mobileInput.lookY = joystickState.right.y * 30;
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('touchend', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchIds.leftJoy) {
+        joystickState.left = resetJoystick(leftJoystick);
+        mobileInput.moveX = 0;
+        mobileInput.moveY = 0;
+        touchIds.leftJoy = null;
+      }
+      if (touch.identifier === touchIds.rightJoy) {
+        joystickState.right = resetJoystick(rightJoystick);
+        mobileInput.lookX = 0;
+        mobileInput.lookY = 0;
+        touchIds.rightJoy = null;
+      }
+    }
+  });
+
+  // Fire button
+  fireBtn.addEventListener('touchstart', e => {
+    if (!gameActive) return;
+    const touch = e.touches[0];
+    touchIds.fire = touch.identifier;
+    mouseDown = true;
+    e.preventDefault();
+  });
+
+  fireBtn.addEventListener('touchend', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchIds.fire) {
+        mouseDown = false;
+        touchIds.fire = null;
+      }
+    }
+  });
+
+  // Reload button
+  reloadBtn.addEventListener('touchstart', e => {
+    if (!gameActive) return;
+    const touch = e.touches[0];
+    touchIds.reload = touch.identifier;
+    startReload();
+    e.preventDefault();
+  });
+
+  reloadBtn.addEventListener('touchend', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchIds.reload) {
+        touchIds.reload = null;
+      }
+    }
+  });
+
+  // Medkit button
+  medkitBtn.addEventListener('touchstart', e => {
+    if (!gameActive) return;
+    const touch = e.touches[0];
+    touchIds.medkit = touch.identifier;
+    useMedkit();
+    e.preventDefault();
+  });
+
+  medkitBtn.addEventListener('touchend', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchIds.medkit) {
+        touchIds.medkit = null;
+      }
+    }
+  });
+
+  // Scope button
+  scopeBtn.addEventListener('touchstart', e => {
+    if (!gameActive) return;
+    const touch = e.touches[0];
+    touchIds.scope = touch.identifier;
+    toggleScope(true);
+    e.preventDefault();
+  });
+
+  scopeBtn.addEventListener('touchend', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchIds.scope) {
+        toggleScope(false);
+        touchIds.scope = null;
+      }
+    }
+  });
+
+  // Dive button (for drop phase)
+  diveBtn.addEventListener('touchstart', e => {
+    if (!gameActive || !dropping) return;
+    const touch = e.touches[0];
+    touchIds.dive = touch.identifier;
+    keys['Space'] = true; // simulate space key for gliding
+    mobileInput.diving = true;
+    e.preventDefault();
+  });
+
+  diveBtn.addEventListener('touchend', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchIds.dive) {
+        keys['Space'] = false;
+        mobileInput.diving = false;
+        touchIds.dive = null;
+      }
+    }
+  });
+
+  // Right joystick touch start
+  rightJoystick.addEventListener('touchstart', e => {
+    if (rightJoyTouchId === null && !gameActive) return;
+    const touch = e.touches[0];
+    rightJoyTouchId = touch.identifier;
+    touchIds.rightJoy = touch.identifier;
+  });
+
+  // Prevent right-click menu on mobile
+  document.addEventListener('contextmenu', e => e.preventDefault());
 }
 
 function useMedkit() {
@@ -1998,6 +2264,13 @@ function updatePlayer(dt) {
     if (keys['KeyS']) { player.x -= forward.x * horizSpd * dt; player.z -= forward.z * horizSpd * dt; }
     if (keys['KeyA']) { player.x -= right.x * horizSpd * dt; player.z -= right.z * horizSpd * dt; }
     if (keys['KeyD']) { player.x += right.x * horizSpd * dt; player.z += right.z * horizSpd * dt; }
+    // Mobile steering
+    if (isMobile) {
+      player.x += forward.x * mobileInput.moveY * horizSpd * dt;
+      player.z += forward.z * mobileInput.moveY * horizSpd * dt;
+      player.x += right.x * mobileInput.moveX * horizSpd * dt;
+      player.z += right.z * mobileInput.moveX * horizSpd * dt;
+    }
     // Also glide forward automatically when gliding
     if (gliding) { player.x += forward.x * horizSpd * 0.5 * dt; player.z += forward.z * horizSpd * 0.5 * dt; }
     player.x = Math.max(-CFG.HALF_MAP, Math.min(CFG.HALF_MAP, player.x));
@@ -2052,6 +2325,12 @@ function updatePlayer(dt) {
   if (keys['KeyS']) { mx -= forward.x; mz -= forward.z; }
   if (keys['KeyA']) { mx -= right.x; mz -= right.z; }
   if (keys['KeyD']) { mx += right.x; mz += right.z; }
+
+  // Mobile input
+  if (isMobile) {
+    mx += forward.x * mobileInput.moveY + right.x * mobileInput.moveX;
+    mz += forward.z * mobileInput.moveY + right.z * mobileInput.moveX;
+  }
 
   const len = Math.sqrt(mx*mx + mz*mz);
   if (len > 0) { mx /= len; mz /= len; }
@@ -2130,6 +2409,13 @@ function updatePlayer(dt) {
     camera.lookAt(player.x, player.y + 0.5, player.z);
     // Apply pitch offset for aiming up/down
     camera.rotation.x += player.pitch * 0.4;
+  }
+
+  // Mobile camera look
+  if (isMobile && locked) {
+    player.yaw -= mobileInput.lookX * 0.003;
+    player.pitch -= mobileInput.lookY * 0.003;
+    player.pitch = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, player.pitch));
   }
 
   // Shooting
@@ -3004,6 +3290,7 @@ function updatePickups(dt) {
         player.weapon = p.weaponKey;
         player.ammo = WEAPONS[p.weaponKey].ammo;
         addKillMsg('Picked up ' + WEAPONS[p.weaponKey].name + '!');
+        updateMobileScopeButton();
       }
       pickedUp = true;
     }
